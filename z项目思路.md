@@ -121,3 +121,45 @@
 
     定义 GoodsList 组件，通过 props 拿到父组件 Home 的 goods['type'].list 中的数据
     定义 GoodsListItem 组件，通过 props 拿到父组件 GoodsList 的 goods-item
+
+## 使用 better-scroll 重构项目
+
+### better-scroll 的基本使用
+
+    1. 安装 npm i better-scroll --save
+    2. 在 script 标签中 new 一个  better-scroll 实例，
+    注意：
+          默认情况下 BScroll 是不可以实时监听滚动位置的，如果想监听，必须在 new 这个对象的时候，在第二个参数这里传参数，有两个很重要的参数：
+            + 参数一：probeType : 侦测，默认值为 0
+                      0 和 1 都是不侦测实时的位置，
+                      2 是滚动的过程中侦测，惯性滚动过程中不侦测
+                      3 只要是滚动都侦测
+            + 参数二：click
+                      只有当 click 的值为 true 时，才能监听里面的按钮点击事件
+            + 参数三：pullUpLoad
+                      当值为 true 时，上拉加载更多
+          要滚动的区域必须有一个默认的高度
+      ```
+      const bscroll = new BScroll(document.querySelect('要控制的类名'),{
+        probeType: 3 
+      })
+
+      bscroll.on('scroll',(position) => {
+        position.
+      })
+
+      bscroll.on('pullingUp', () => {
+        console.log('上拉加载更多')
+        // 发送网络请求，请求更多页的数据
+
+        // 等数据请求完，并且将新的数据展示出来后，必须调用以下方法，表示可以再一次加载更多
+        // 定时器的意义是必须两秒过后才可以再次上拉加载更多 
+        setTimeOut(() => {
+          bscroll.finishPullUp()
+        },2000)
+      })
+      ```
+
+### 使用 better-scroll 基本构建
+
+    注意：在 components 和 vue 实例中，better-scroll 实例必须写在 mounted() 函数中，因为 created() 调用的时候，拿不到 dom 元素，必须在挂载完 dom 元素之后才能使用这个
