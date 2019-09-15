@@ -1,34 +1,48 @@
 <template>
   <div id="home" class="home">
     <nav-bar class="home-nav"><div slot="center">购物街</div></nav-bar>
-    <div class="wrapper">
-      <div class="content">
-        <home-swiper :bannersList="bannersList" class="home-swiper"></home-swiper>
+    <tab-control ref="tabControl1"
+                  :titles="['流行','新款','精选']"
+                  @tabClick="tabClick"
+                  class="tab-control"
+                  v-show="isTabFixed"
+                  ></tab-control>
+    <scroll class="content" ref="scroll" 
+            :probe-type="3" 
+            @scroll="contentScroll"
+            :pull-up-load="true"
+            @pullingUp="loadMore">
+        <home-swiper :bannersList="bannersList" 
+                      class="home-swiper"
+                      @swiperImageLoad="swiperImageLoad"></home-swiper>
         <recommend-view :recommends="recommends"></recommend-view>
         <feature-view></feature-view>
-        <tab-control class="tab-control" 
+        <tab-control ref="tabControl2"
                     :titles="['流行','新款','精选']"
                     @tabClick="tabClick"
                     ></tab-control>
         <goods-list :goods="showGoods"></goods-list>
-      </div>
-    </div>
+    </scroll>
+    <back-top @click.native="backTop" v-show="isBackShow"/>
   </div>
 </template>
 
 
 <script>
   import NavBar from 'components/common/navbar/NavBar'
+  import Scroll from 'components/common/scroll/Scroll'
+  import BackTop from 'components/common/backtop/BackTop'
   import TabControl from 'components/content/tabControl/TabControl'
   import GoodsList from 'components/content/goods/GoodsList'
+
 
   import HomeSwiper from './childComps/HomeSwiper'
   import RecommendView from './childComps/RecommendView'
   import FeatureView from '../home/childComps/FeatureView'
 
   import { getHomeMultidata , getHomeGoods } from 'network/home'
+  import {debounce} from '../../common/utils'
 
-  import BScroll from 'better-scroll'
 
   export default {
     name: 'Home',
@@ -39,7 +53,8 @@
       HomeSwiper,
       RecommendView,
       FeatureView,
-      
+      Scroll,
+      BackTop
     },
     data() {
       return {
@@ -52,7 +67,9 @@
           'sell': {page: 0,list: []}
         },
         currentType: 'pop',
-        scoll: null
+        isBackShow: false,
+        tabOffset: 0,
+        isTabFixed: false
       }
     },
     computed: {
@@ -68,22 +85,17 @@
       this.getHomeGoods ('pop') 
       this.getHomeGoods ('new')
       this.getHomeGoods ('sell')
+   
     },
     mounted () {
-      this.scoll = new BScroll (document.querySelector('.wrapper'),{
-        probeType: 3,
-        click: true,
-        pullUpLoad: true
-      }), 
-      this.scoll.on('scroll',(position) => {
-        position
-      }),
-      this.scoll.on('pullingUp', () => {
-          console.log('上拉加载更多')
-          setTimeout(() => {
-            this.scoll.finishPullUp()
-          },2000)
-        })
+      // 图片加载完成的事件监听
+      const refresh = debounce(this.$refs.scroll.refresh,200)
+      this.$bus.$on('itemImageLoad',() => {
+        refresh()
+      })
+      
+      // 获得 tabControl 的 offsetTop
+
     },
     methods: {
       // 网络请求相关的方法
@@ -100,6 +112,9 @@
         getHomeGoods(type,page).then(res => {
             this.goods[type].list.push(...res.data.data.list)
             this.goods[type].page += 1
+
+            // 完成上拉加载更多
+            this.$refs.scroll.finishPullUp()
         })
       },
       // 事件监听的方法
@@ -114,6 +129,26 @@
           case 2:
             this.currentType = 'sell'
         }
+        this.$refs.tabControl1.currentIndex = index
+        this.$refs.tabControl2.currentIndex = index
+      },
+      backTop () {
+        this.$refs.scroll.scrollTo(0,0)
+      },
+      contentScroll (position) {
+        // 判断 backTop 是否显示
+        this.isBackShow = (-position.y) > 1000
+        // 决定 tabControl 是否吸顶
+        this.isTabFixed = (-position.y) > this.tabOffset
+
+      },
+      loadMore () {
+        this.getHomeGoods(this.currentType)
+      },
+      swiperImageLoad () {
+
+        this.tabOffset = this.$refs.tabControl2.$el.offsetTop   
+        
       }
     }
   }
@@ -123,7 +158,7 @@
 <style scoped>
   #home {
     padding-top: 44px;
-    overflow: hidden;
+   overflow: hidden;
   }
   .home-nav {
     background-color: var(--color-tint);
@@ -136,11 +171,10 @@
     z-index: 9;
   }
   .tab-control {
-    position: sticky;
-    top: 44px;
-    z-index: 9;
+    position: relative;
+    z-index: 9
   }
   .wrapper {
-    height: 465px;
+    height: 435px;
   }
 </style>

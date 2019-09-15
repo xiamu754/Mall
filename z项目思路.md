@@ -140,6 +140,8 @@
                       当值为 true 时，上拉加载更多
           要滚动的区域必须有一个默认的高度
       ```
+      // 这个方法第一个参数是要控制的元素
+      // 可以给被控制的元素加一个 ref="refname"，再通过 this.$refs.refname 拿到这个元素本身
       const bscroll = new BScroll(document.querySelect('要控制的类名'),{
         probeType: 3 
       })
@@ -163,3 +165,115 @@
 ### 使用 better-scroll 基本构建
 
     注意：在 components 和 vue 实例中，better-scroll 实例必须写在 mounted() 函数中，因为 created() 调用的时候，拿不到 dom 元素，必须在挂载完 dom 元素之后才能使用这个
+
+### 封装 better-scroll
+
+    注意：ref 如果是绑定在组件中的，那么通过 this.$refs.refname 获取到的是一个对象
+          ref 如果是绑定在普通元素中的，那么通过 this.$refs.refname 获取到的是一个元素对象
+    把 better-scroll 独立封装成一个单独的组件，多个页面都可以复用
+
+### 返回顶部功能的实现
+
+    - 先在布局上显示这个小组件
+    - better-scroll 实例给我们提供了一个方法，scrollTo(),这个方法可以让回到指定位置。有三个参数，分别是指定位置的 x 坐标、y 坐标和到达指定位置要用的时间(单位毫秒)。
+    - 在 Scroll 这个组件中定义一个方法 scrollTo(x, y, time=300)),这个方法是对上一层的 scrollTo() 的进一步封装。依然传入三个参数。
+    - 在需要返回顶部的组件中定义方法
+        ```
+        backTop () {
+          this.$refs.scroll.scrollTo(0,0)
+        }
+        ```
+    - 在 back-top 组件上绑定点击事件。
+    注意：组件是不能直接监听点击事件的，加上 .native 属性，才能监听原生时间
+    做到这里，返回顶部按钮基本功能实现，但是还不能随着滑轮的滚动来隐藏
+    - 当滚动的值大于 1000 时，显示 backTop 组件
+        在这里，必须实时监听滑动的位置。需要在 Scroll.vue 中监听滑动事件，并且向外发送一个自定义事件，这个事件需要把 position 传出去
+        在 Home.vue 中的 back-top 标签中，接受这个自定义事件，并且定义事件处理函数，这个函数需要拿到自定义事件传过来的 position。同时在这个标签中绑定 v-show 的值，这个值需要事先在 data 中存储，这里我使用 isBackShow 来作为 v-show 的值，默认数 false。只有滑动大于 1000 时，这个值才为 true。因为向下滑动都是负值，所以需要先将 position.y 转成正值。
+        ```
+        Scroll.vue：
+        this.scroll.on('scroll',(position) => {
+          this.$emit('scroll',position)
+        })
+        Home.vue：
+        contentScroll (position) {
+          this.isBackShow = (-position.y) > 1000
+        }
+        ```
+
+### 解决 Better-Scroll 滚动区域的问题
+
+    Better-Scroll 在决定有多少区域可以滚动时，根据 scrollHeight 属性决定
+        scrollHeight 属性时根据 Better-Scroll 中的 content 中的子组件高度
+        但是在首页中，刚开始计算 scrollHeight 属性时，没有将图片计算在内的
+        所以，计算出来的是错误的
+        后来，图片加载进来之后有了新的高度，但是 ScrollHeight 属性并没有更新
+    如何解决这个问题？
+        监听每一张图片是否加载完成，只要有一张图片加载完成了，执行一次 refresh() 
+        如何监听图片加载完成了？
+        Vue 中监听：@load= '方法'
+        监听之后，再调用
+    事假总线的概念
+        要在 scroll 中拿到 goodListItem 图片什么时候加载完可不是容易的事情，因为它们是不同的组件，又没有直接的关联。
+            在展示 img 的地方，绑定一个 @load 事件，这个事件的处理函数通过事件总线发送一个自定义事件
+            事件总线 $bus 默认为空，我们在 main.js 中把 Vue 的原型中的 $bus 赋值为一个 Vue 实例，通过这个实例，在 scroll 中可以拿到发送的自定义事件，就可以监听 goodListItem 中图片加载
+            在 goodListItem 组件本身可以通过 @load 监听图片什么时候加载
+            在 Scroll 封装一个 refresh() 方法，在需要用的地方通过 $ref.scroll.refresh()
+
+### 防抖函数的应用
+
+    需要封装一个函数，这个桉树有两个参数，第一个参数是一个函数，这个函数就是需要做防抖函数的函数本身，第二个参数是时间
+    debounce (function，delay) {
+      let timer = null
+      return function (...args) {
+        if (timer) clearTimeout(timer)
+        timer = setTimeout(() => {
+          func.apply(this,args)
+        },delay)
+      }
+    }
+
+### 上拉加载更多数据
+
+    监听上拉事件，向外发送这个事件
+    在 Home.vue 中监听这个事件，定义事件处理函数
+    拿到需要具体加载哪一块的数据，调用 getHomeGoods(this.currentType) 函数
+    在 getHomeGoods() 函数中拿到 this.$refs.scroll.finishPullUp() 这个方法，进行加载
+
+### tabControl 的吸顶效果
+
+1. 获取tabControl 的 offsetTop 属性值
+    必须知道滚动多少时，开始有吸顶效果，通过 tabControl 的 offsetTop 属性我们可以获取到需要滚动多高
+    所有的组件都有一个属性是 $el,这个属性用于获取组件中的元素
+    如果直接在 mounted 中获取 tabControl 的 offsetTop 值是不正确的
+    如何获取正确的值？
+        监听 HomeSwiper 中 img 的加载完成，加载完成后发出事件，在 Home.vue 中获取正确的值
+        为了不让 HomeSwiper 多次发出事件，可以使用 isLoad 进行状态记录
+2. 监听滚动，改变 tabControl 的样式
+    在最上面，多复制一个 PlaceHolderTabControl 组件对象，利用它来实现停留效果
+    当用户滚动到一定的位置时，PlaceHolderTabControl 显示出来
+    当用户没有滚动到一定位置时，PlaceHolderTabControl 隐藏起来
+
+### 让 Hmoe 中内容保持原来的位置
+
+    离开时，保存一个位置信息 saveY
+    进来时，将位置设置为原来的位置 saveY 信息即可，最好回来时进行一次 refresh()
+
+## 6. 详情页
+
+### 根据 id 跳转详情页
+
+    配置路由映射关系，这里需要用到动态路由，需要把 iid 传
+    在 network 里封装有关详情页的网络请求方法
+    拿到之前封装好的 NavBar 组件进一步使用在详情页
+    拿到之前封装好的轮播图组件进一步使用在详情页
+    之前为了保持状态使用了 keepalive，在keepalive 中 exclude="Detail"
+我累了，一个头两个大。思维混乱，要学的东西很多，我还要继续学，
+
+## 7. 购物车相关
+
+封装详情页底部导航栏，给添加购物车组件定义一个自定义事件，发送给父组件，父组件监听
+
+### vuex
+
+    在 store 文件夹下新建 index.js 文件
+    
